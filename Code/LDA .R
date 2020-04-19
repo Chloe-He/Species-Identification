@@ -1,0 +1,93 @@
+##start with high dimensional dataset##
+alg_dat
+dim(alg_dat)
+
+##label vector##
+resp = spec_class
+
+##matrix set up##
+idx_mat <- matrix(0,24,10)
+iter<-1
+m <- matrix(0,24,10)
+prob <- rep(list(m),10)
+dic.acc <- c()
+
+est_cl_ftn  <- function(x) return(names(which.max(table(x))))
+performance <- function(tb){
+  sensitivity <- tb[2,2]/sum(tb[2,])
+  specificity <- tb[1,1]/sum(tb[1,])
+  FDR <- tb[1,2]/(tb[2,2]+tb[1,2])
+  Accuracy <- (tb[1,1]+tb[2,2])/(tb[1,1]+tb[1,2]+tb[2,1]+tb[2,2])
+  F1.score <- tb[2,2]/(2*tb[2,2]+tb[1,2]+tb[2,1]) 
+  
+  return(list(sensitivity=sensitivity, specificity=specificity, FDR=FDR, Accuracy=Accuracy, F1.score=F1.score))
+}
+
+##Linear Discriminant Analysis##
+while(iter < 11)
+{ 
+  set.seed(iter)
+  lab_idx1 <- sample(which(resp=="1"), 6)
+  lab_idx2 <- sample(which(resp=="2"), 6)
+  lab_idx3 <- sample(which(resp=="3"), 6)
+  lab_idx4 <- sample(which(resp=="4"), 6)
+  lab_idx  <- c(lab_idx1,lab_idx2,lab_idx3,lab_idx4)
+
+  idx_mat[,iter]<- lab_idx
+  
+  resp2 <- resp
+  resp2[which(resp %in% c("1","2","3"))] <- "0"
+  resp2[which(resp=="4")] <- "1"
+  
+  for(i in 1:10)
+  {
+    train_xdt <- alg_dat[-lab_idx,]
+    train_ydt <- as.numeric(resp2[-lab_idx])
+    training <- cbind.data.frame(train_xdt,train_ydt)
+
+    test_xdt <- alg_dat[lab_idx,]
+    test_ydt <- resp2[lab_idx]
+    testing <- cbind.data.frame(test_xdt,test_ydt)
+
+    library(MASS)
+    ldafit <- lda(train_ydt~.,training)
+    ldafit
+    ldapred <- predict(ldafit,testing)
+    ldaclass <- ldapred$class
+    ldatable <- table(ldaclass,test_ydt)
+    ldatable
+    accuracy <- sum(diag(ldatable))/sum(ldatable)*100
+    accuracy
+    #calculate probabilties
+    for (k in 1:24)
+    {
+    prob[[iter]][,i] <- predict(ldafit,testing)$x
+    }
+  }
+    #voting
+    prd_result     <- as.numeric(apply(ifelse(prob[[iter]]>=0,1,0), 1, est_cl_ftn))#threshold : 0.75
+    dic.acc[iter]  <- mean(test_ydt==prd_result)
+  
+    cat("********** End of ",iter,"th iteration*********\n")
+    iter <- iter+1
+}
+
+
+
+tb.list <- rep(list(0),10)
+ans <- c(rep(0,18), rep(1,6)) ##true species##
+for(i in 1:10){
+  p <- as.numeric(apply(ifelse(prob[[i]]>=0.75,1,0), 1, est_cl_ftn))
+  tb.list[[i]] <- table(ans,p)
+}
+tb.list
+
+result <- unlist(sapply(tb.list, performance))
+mean(dic.acc)
+
+res <- matrix(result, 5, 10, 
+              dimnames = list(c("sensitivity","specificity", "FDR", "Accuracy", "F1.score"), 
+                              c(1:10)))
+
+apply(res,1,mean)
+
